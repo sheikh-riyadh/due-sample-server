@@ -14,13 +14,16 @@ app.use(express.json());
 app.get("/", async (req, res) => {
   try {
     const client = await clientPromise;
-    const db = client.db("due-sample"); // তোমার DB name
-    const collections = await db.collection('due-sample');
+    const db = client.db("due-sample");
+    const sample_data = db.collection('due-sample');
+
+    const data = await sample_data.find({}).toArray()
+
 
     res.json({
       success: true,
       message: "🔥 MongoDB connected (native)",
-      collections
+      data
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
