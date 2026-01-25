@@ -1,0 +1,15 @@
+{
+  "name": "due-sample",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^4.19.2",
+    "mongodb": "^6.5.0"
+  }
+}
