@@ -5,7 +5,11 @@ import "dotenv/config";
 import { ObjectId } from "mongodb";
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: ["https://seller-center-32880.web.app"],
+  }),
+);
 app.use(express.json());
 
 /* PHLEBOTOMIST START FROM HERE  */
@@ -40,7 +44,7 @@ app.post("/add-phlebotomist", async (req, res) => {
   }
 });
 
-app.patch("update-phlebotomist", async (req, res) => {
+app.patch("/update-phlebotomist", async (req, res) => {
   const { id, data } = req.body;
   try {
     const client = await clientPromise;
@@ -48,8 +52,8 @@ app.patch("update-phlebotomist", async (req, res) => {
     const phlebotomists_collection = db.collection("phlebotomist");
 
     const filter_data = { _id: new ObjectId(id) };
-    option = { upsert: true };
-    updateData = {
+
+    const updateData = {
       $set: {
         ...data,
       },
@@ -58,10 +62,11 @@ app.patch("update-phlebotomist", async (req, res) => {
     const response = await phlebotomists_collection.updateOne(
       filter_data,
       updateData,
-      option,
     );
     res.status(200).json(response);
-  } catch (error) {}
+  } catch (error) {
+    res.status(500).json({ message: "An error occurred" });
+  }
 });
 
 app.delete("/delete-phlebotomist", async (req, res) => {
@@ -73,15 +78,13 @@ app.delete("/delete-phlebotomist", async (req, res) => {
 
     const query = { _id: new ObjectId(id) };
     const response = await phlebotomists_collection.deleteOne(query);
-    res.status(204).json(response);
+    res.status(200).json(response);
   } catch (error) {
     res.status(500).json({ message: "An error occurred" });
   }
 });
 
 /* PHLEBOTOMIST END FROM HERE  */
-
-
 
 /* DUE SAMPLE START FROM HERE  */
 
@@ -110,11 +113,9 @@ app.post("/add-sample", async (req, res) => {
       phlebotomist_id: req.body.phlebotomist_id,
     });
     if (!phlebotomist?._id) {
-      res
-        .status(404)
-        .json({
-          message: `On this ${req.body.phlebotomist_id} id phlebotomist not found 😥`,
-        });
+      res.status(404).json({
+        message: `On this ${req.body.phlebotomist_id} id phlebotomist not found 😥`,
+      });
       return;
     } else {
       const due_sample = {
@@ -131,17 +132,15 @@ app.post("/add-sample", async (req, res) => {
   }
 });
 
-app.patch("update-sample", async (req, res) => {
+app.patch("/update-sample", async (req, res) => {
   const { id, data } = req.body;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const sample_data_collection = db.collection("due-sample");
-  
 
     const filter_data = { _id: new ObjectId(id) };
-    option = { upsert: true };
-    updateData = {
+    const updateData = {
       $set: {
         ...data,
       },
@@ -150,10 +149,11 @@ app.patch("update-sample", async (req, res) => {
     const response = await sample_data_collection.updateOne(
       filter_data,
       updateData,
-      option,
     );
     res.status(200).json(response);
-  } catch (error) {}
+  } catch (error) {
+    res.status(500).json({ message: "An error occurred" });
+  }
 });
 
 app.delete("/delete-sample", async (req, res) => {
@@ -165,7 +165,7 @@ app.delete("/delete-sample", async (req, res) => {
 
     const query = { _id: new ObjectId(id) };
     const response = await sample_data_collection.deleteOne(query);
-    res.status(204).json(response);
+    res.status(200).json(response);
   } catch (error) {
     res.status(500).json({ message: "An error occurred" });
   }
