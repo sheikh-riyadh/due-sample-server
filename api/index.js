@@ -5,11 +5,7 @@ import "dotenv/config";
 import { ObjectId } from "mongodb";
 
 const app = express();
-app.use(
-  cors({
-    origin: ["https://seller-center-32880.web.app"],
-  }),
-);
+app.use(cors());
 app.use(express.json());
 
 /* PHLEBOTOMIST START FROM HERE  */
