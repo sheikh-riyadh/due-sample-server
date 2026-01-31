@@ -11,15 +11,41 @@ app.use(express.json());
 /* PHLEBOTOMIST START FROM HERE  */
 
 app.get("/get-all-phlebotomist", async (req, res) => {
+  const { page = 0, limit = 10, search = null } = req.query;
+
+  let results, total;
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const phlebotomists_collection = db.collection("phlebotomist");
+    phlebotomists_collection.createIndex(
+      { phlebotomist_id: 1 },
+      { unique: true },
+    );
 
-    const response = await phlebotomists_collection.find({}).toArray();
-    res.status(200).json(response);
+    if (search) {
+      const doc = await phlebotomists_collection.find({ name: { $regex: search, $options: "i" } }).toArray();
+      results = doc ? doc : [];
+      total = results.length;
+    } else {
+      results = await phlebotomists_collection
+        .find({})
+        .sort({ _id: -1 })
+        .skip(parseInt(page) * parseInt(limit))
+        .limit(parseInt(limit))
+        .toArray();
+      total = await phlebotomists_collection.countDocuments({});
+    }
+    res.status(200).json({ data: results, total });
   } catch (error) {
-    res.status(500).json({ message: "An error occurred" });
+    if (error.code === 11000) {
+      res.status(400).json({
+        message: "phlebotomist_id must be unique",
+      });
+    } else {
+      res.status(500).json({ message: "An error occurred" });
+    }
   }
 });
 
@@ -30,13 +56,15 @@ app.post("/add-phlebotomist", async (req, res) => {
     const phlebotomists_collection = db.collection("phlebotomist");
 
     const response = await phlebotomists_collection.insertOne(req.body);
-    if (response?.acknowledged) {
-      res.status(201).json(response);
-    } else {
-      res.status(500).json({ message: "Something went wrong 😥" });
-    }
+    res.status(201).json(response);
   } catch (error) {
-    res.status(500).json({ message: "An error occurred" });
+    if (error.code === 11000) {
+      res.status(400).json({
+        message: "phlebotomist_id must be unique",
+      });
+    } else {
+      res.status(500).json({ message: "An error occurred" });
+    }
   }
 });
 
