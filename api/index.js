@@ -1,51 +1,49 @@
 import express from "express";
-import clientPromise from "../lib/mongodb.js";
+import { ObjectId } from "mongodb";
 import cors from "cors";
 import "dotenv/config";
-import { ObjectId } from "mongodb";
+import moment from "moment";
+import clientPromise from "../lib/mongodb.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* PHLEBOTOMIST START FROM HERE  */
+// ========== UTILITY ==========
+const handleError = (res, error, customMessage) => {
+  if (error.code === 11000) {
+    return res
+      .status(409)
+      .json({ message: customMessage || "Duplicate key error" });
+  }
+  return res.status(500).json({ message: "An error occurred" });
+};
 
+// ========== PHLEBOTOMIST ROUTES ==========
 app.get("/get-all-phlebotomist", async (req, res) => {
-  const { page = 0, limit = 10, search = null } = req.query;
-
-  let results, total;
-
+  const { page = 0, limit = 10, search = "" } = req.query;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
-    const phlebotomists_collection = db.collection("phlebotomist");
-    phlebotomists_collection.createIndex(
-      { phlebotomist_id: 1 },
-      { unique: true },
-    );
+    const collection = db.collection("phlebotomist");
 
-    if (search) {
-      const doc = await phlebotomists_collection.find({ name: { $regex: search, $options: "i" } }).toArray();
-      results = doc ? doc : [];
-      total = results.length;
-    } else {
-      results = await phlebotomists_collection
-        .find({})
-        .sort({ _id: -1 })
-        .skip(parseInt(page) * parseInt(limit))
-        .limit(parseInt(limit))
-        .toArray();
-      total = await phlebotomists_collection.countDocuments({});
-    }
+    // One-time unique index (safe)
+    await collection.createIndex({ phlebotomist_id: 1 }, { unique: true });
+
+    const query = search ? { name: { $regex: search, $options: "i" } } : {};
+
+    const results = await collection
+      .find(query)
+      .sort({ _id: -1 })
+      .skip(parseInt(page) * parseInt(limit))
+      .limit(parseInt(limit))
+      .toArray();
+
+    const total = await collection.countDocuments(query);
+
     res.status(200).json({ data: results, total });
   } catch (error) {
-    if (error.code === 11000) {
-      res.status(400).json({
-        message: "phlebotomist_id must be unique",
-      });
-    } else {
-      res.status(500).json({ message: "An error occurred" });
-    }
+    handleError(res, error, "phlebotomist_id must be unique");
   }
 });
 
@@ -53,18 +51,12 @@ app.post("/add-phlebotomist", async (req, res) => {
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
-    const phlebotomists_collection = db.collection("phlebotomist");
+    const collection = db.collection("phlebotomist");
 
-    const response = await phlebotomists_collection.insertOne(req.body);
+    const response = await collection.insertOne(req.body);
     res.status(201).json(response);
   } catch (error) {
-    if (error.code === 11000) {
-      res.status(400).json({
-        message: "phlebotomist_id must be unique",
-      });
-    } else {
-      res.status(500).json({ message: "An error occurred" });
-    }
+    handleError(res, error, "phlebotomist_id must be unique");
   }
 });
 
@@ -73,23 +65,16 @@ app.patch("/update-phlebotomist", async (req, res) => {
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
-    const phlebotomists_collection = db.collection("phlebotomist");
+    const collection = db.collection("phlebotomist");
 
-    const filter_data = { _id: new ObjectId(id) };
-
-    const updateData = {
-      $set: {
-        ...data,
-      },
-    };
-
-    const response = await phlebotomists_collection.updateOne(
-      filter_data,
-      updateData,
+    const response = await collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: data },
     );
+
     res.status(200).json(response);
   } catch (error) {
-    res.status(500).json({ message: "An error occurred" });
+    handleError(res, error);
   }
 });
 
@@ -98,85 +83,123 @@ app.delete("/delete-phlebotomist", async (req, res) => {
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
-    const phlebotomists_collection = db.collection("phlebotomist");
+    const collection = db.collection("phlebotomist");
 
-    const query = { _id: new ObjectId(id) };
-    const response = await phlebotomists_collection.deleteOne(query);
+    const response = await collection.deleteOne({ _id: new ObjectId(id) });
     res.status(200).json(response);
   } catch (error) {
-    res.status(500).json({ message: "An error occurred" });
+    handleError(res, error);
   }
 });
 
-/* PHLEBOTOMIST END FROM HERE  */
-
-/* DUE SAMPLE START FROM HERE  */
+// ========== DUE SAMPLE ROUTES ==========
 
 app.get("/get-all-sample", async (req, res) => {
+  const {
+    page = 0,
+    limit = 10,
+    search = "",
+    selectedDate = "",
+    sampleStatus = "Due",
+  } = req.query;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
-    const sample_data_collection = db.collection("due-sample");
+    const collection = db.collection("due-sample");
 
-    const response = await sample_data_collection.find({}).toArray();
-    res.status(200).json(response);
+    const query = { status: sampleStatus };
+
+    if (selectedDate) {
+      query.filterDate = selectedDate;
+    }
+    if (search) query.invoice = { $regex: search, $options: "i" };
+
+    const results = await collection
+      .find(query)
+      .sort({ _id: -1 })
+      .skip(parseInt(page) * parseInt(limit))
+      .limit(parseInt(limit))
+      .toArray();
+
+    const total = await collection.countDocuments(query);
+
+    res.status(200).json({ data: results, total });
   } catch (error) {
-    res.status(500).json({ message: "An error occurred" });
+    handleError(res, error);
   }
 });
 
 app.post("/add-sample", async (req, res) => {
-  const client = await clientPromise;
-  const db = client.db("due-sample");
-
-  const sample_data_collection = db.collection("due-sample");
-  const phlebotomists_collection = db.collection("phlebotomist");
-
   try {
-    const phlebotomist = await phlebotomists_collection.findOne({
+    const client = await clientPromise;
+    const db = client.db("due-sample");
+    const sampleCollection = db.collection("due-sample");
+    const phlebotomistCollection = db.collection("phlebotomist");
+
+    // Ensure unique invoice index (one-time)
+    await sampleCollection.createIndex({ invoice: 1 }, { unique: true });
+
+    // Validate phlebotomist exists
+    const phlebotomist = await phlebotomistCollection.findOne({
       phlebotomist_id: req.body.phlebotomist_id,
     });
-    if (!phlebotomist?._id) {
-      res.status(404).json({
-        message: `On this ${req.body.phlebotomist_id} id phlebotomist not found 😥`,
-      });
-      return;
-    } else {
-      const due_sample = {
-        ...req.body,
-        status: "due",
-        phlebotomist,
-      };
 
-      const response = await sample_data_collection.insertOne(due_sample);
-      res.status(201).json(response);
+    if (!phlebotomist) {
+      return res.status(404).json({
+        message: `Phlebotomist with id ${req.body.phlebotomist_id} not found 😥`,
+      });
     }
+
+    const dueSample = {
+      ...req.body, // includes invoice sent from front-end
+      phlebotomist: [{ ...phlebotomist }],
+      createdAt: moment().toISOString(),
+      filterDate: moment().format("YYYY-MM-DD")
+    };
+
+    const response = await sampleCollection.insertOne(dueSample);
+    res.status(201).json(response);
   } catch (error) {
-    res.status(500).json({ message: "An error occurred" });
+    handleError(res, error, "Invoice must be unique");
   }
 });
 
 app.patch("/update-sample", async (req, res) => {
   const { id, data } = req.body;
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
-    const sample_data_collection = db.collection("due-sample");
+    const collection = db.collection("due-sample");
+    const phlebotomistCollection = db.collection("phlebotomist");
 
-    const filter_data = { _id: new ObjectId(id) };
+    // Validate new phlebotomist
+    const newPhlebotomist = await phlebotomistCollection.findOne({
+      phlebotomist_id: data?.phlebotomist_id,
+    });
+
+    if (!newPhlebotomist) {
+      return res.status(404).json({
+        message: `Phlebotomist with id ${data?.phlebotomist_id} not found 😥`,
+      });
+    }
+
+    // Remove phlebotomist from data if exists
+    const { phlebotomist, ...otherData } = data;
+
     const updateData = {
-      $set: {
-        ...data,
-      },
+      $set: { ...otherData, updatedAt: moment().toISOString() },
+      $addToSet: { phlebotomist: { ...newPhlebotomist } }, // add without conflict
     };
 
-    const response = await sample_data_collection.updateOne(
-      filter_data,
+    const response = await collection.updateOne(
+      { _id: new ObjectId(id) },
       updateData,
     );
+
     res.status(200).json(response);
   } catch (error) {
-    res.status(500).json({ message: "An error occurred" });
+    handleError(res, error);
   }
 });
 
@@ -185,16 +208,13 @@ app.delete("/delete-sample", async (req, res) => {
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
-    const sample_data_collection = db.collection("phlebotomist");
+    const collection = db.collection("due-sample");
 
-    const query = { _id: new ObjectId(id) };
-    const response = await sample_data_collection.deleteOne(query);
+    const response = await collection.deleteOne({ _id: new ObjectId(id) });
     res.status(200).json(response);
   } catch (error) {
-    res.status(500).json({ message: "An error occurred" });
+    handleError(res, error);
   }
 });
-
-/* DUE SAMPLE END FROM HERE  */
 
 export default app;
