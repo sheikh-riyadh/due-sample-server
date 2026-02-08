@@ -19,6 +19,19 @@ const handleError = (res, error, customMessage) => {
   return res.status(500).json({ message: "An error occurred" });
 };
 
+app.get("/overview", async (req, res) => {
+  try {
+    const client = await clientPromise;
+    const db = client.db("due-sample");
+    const collection = db.collection("due-sample");
+
+    const results = await collection.find({}).toArray();
+    res.status(200).json({ data: results });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
 // ========== PHLEBOTOMIST ROUTES ==========
 app.get("/get-all-phlebotomist", async (req, res) => {
   const { page = 0, limit = 10, search = "" } = req.query;
@@ -154,7 +167,10 @@ app.post("/add-sample", async (req, res) => {
       ...req.body, // includes invoice sent from front-end
       phlebotomist: [{ ...phlebotomist }],
       createdAt: moment().toISOString(),
-      filterDate: moment().format("YYYY-MM-DD")
+      filterDate: moment().format("YYYY-MM-DD"),
+      date: moment().format("D"),
+      month: moment().format("MMM"),
+      year: moment().format("YYYY"),
     };
 
     const response = await sampleCollection.insertOne(dueSample);
@@ -188,7 +204,13 @@ app.patch("/update-sample", async (req, res) => {
     const { phlebotomist, ...otherData } = data;
 
     const updateData = {
-      $set: { ...otherData, updatedAt: moment().toISOString() },
+      $set: {
+        ...otherData,
+        updatedAt: moment().toISOString(),
+        updatedDate: moment().format("D"),
+        updatedMonth: moment().format("MMM"),
+        updatedYear: moment().format("YYYY"),
+      },
       $addToSet: { phlebotomist: { ...newPhlebotomist } }, // add without conflict
     };
 
