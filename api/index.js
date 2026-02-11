@@ -4,10 +4,41 @@ import cors from "cors";
 import "dotenv/config";
 import moment from "moment";
 import clientPromise from "../lib/mongodb.js";
+import cookieParser from "cookie-parser";
+import jwt from "jsonwebtoken";
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
+  }),
+);
+
 app.use(express.json());
+app.use(cookieParser());
+
+const cookieOptions = {
+  httpOnly: true,
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+  secure: process.env.NODE_ENV === "production" ? true : false,
+};
+
+const verify = async (req, res, next) => {
+  const token = req.cookies?.captake_user_token;
+  if (!token) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  jwt.verify(token, process.env.JWT_TOKEN, (error, decoded) => {
+    if (error) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    req.user = decoded;
+    next();
+  });
+};
 
 // ========== UTILITY ==========
 const handleError = (res, error, customMessage) => {
@@ -18,6 +49,43 @@ const handleError = (res, error, customMessage) => {
   }
   return res.status(500).json({ message: "An error occurred" });
 };
+
+
+
+
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const client = await clientPromise;
+    const db = client.db("due-sample");
+    const collection = db.collection("user");
+
+    const user = await collection.findOne({ email, password });
+    if (user?._id) {
+      const token = jwt.sign(
+        { email: user.email, role: user.role },
+        process.env.JWT_TOKEN,
+        {
+          expiresIn: "1d",
+        },
+      );
+      res
+        .cookie("pathology_token", token, cookieOptions)
+        .status(200)
+        .json({email:user?.email, role:user?.role});
+      return;
+    }
+  } catch (error) {
+    handleError(res, error, "Something went wrong");
+  }
+});
+
+app.get("/logout", async (req, res) => {
+  res
+    .clearCookie("pathology_token", cookieOptions)
+    .status(200)
+    .json({ message: "success" });
+});
 
 app.get("/overview", async (req, res) => {
   try {
