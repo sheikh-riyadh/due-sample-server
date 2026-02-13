@@ -6,13 +6,11 @@ import moment from "moment";
 import clientPromise from "../lib/mongodb.js";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 
 const app = express();
 const corsOptions = {
-  origin: [
-    "http://localhost:5173",
-    "https://due-test.vercel.app"
-  ],
+  origin: ["http://localhost:5173", "https://due-test.vercel.app"],
   credentials: true,
 };
 app.use(cors(corsOptions));
@@ -26,102 +24,125 @@ const cookieOptions = {
   secure: process.env.NODE_ENV === "production" ? true : false,
 };
 
-const verify = async (req, res, next) => {
-  const token = req.cookies?.pathology_token;
-  if (!token) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-  jwt.verify(token, process.env.JWT_TOKEN, (error, decoded) => {
-    if (error) {
-      res.status(401).json({ message: "Unauthorized" });
-      return;
-    }
-    req.user = decoded;
-    next();
-  });
+//////////////////////////////
+// INIT INDEX ONCE
+//////////////////////////////
+const initIndexes = async () => {
+  const client = await clientPromise;
+  const db = client.db("due-sample");
+
+  await db
+    .collection("phlebotomist")
+    .createIndex({ phlebotomist_id: 1 }, { unique: true });
+
+  await db
+    .collection("due-sample")
+    .createIndex({ invoice: 1 }, { unique: true });
 };
 
-// ========== UTILITY ==========
+initIndexes();
+
+//////////////////////////////
+// AUTH MIDDLEWARE
+//////////////////////////////
+const verify = (req, res, next) => {
+  const token = req.cookies?.pathology_token;
+
+  if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_TOKEN);
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+};
+
+const isAdmin = (req, res, next) => {
+  if (req.user.role !== "admin")
+    return res.status(403).json({ message: "Forbidden access" });
+
+  next();
+};
+
+//////////////////////////////
+// ERROR HANDLER
+//////////////////////////////
 const handleError = (res, error, customMessage) => {
   if (error.code === 11000) {
-    return res
-      .status(409)
-      .json({ message: customMessage || "Duplicate key error" });
+    return res.status(409).json({
+      message: customMessage || "Duplicate key error",
+    });
   }
-  return res.status(500).json({ message: "An error occurred" });
+  return res.status(500).json({ message: "Internal Server Error" });
 };
 
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const collection = db.collection("user");
 
-    const user = await collection.findOne({ email, password });
-    if (user?._id) {
-      const token = jwt.sign(
-        { email: user.email, role: user.role },
-        process.env.JWT_TOKEN,
-        {
-          expiresIn: "1d",
-        },
-      );
-      res
-        .cookie("pathology_token", token, cookieOptions)
-        .status(200)
-        .json({ email: user?.email, role: user?.role });
-      return;
-    } else {
-      res.status(404).json({ message: "Invalid email or password" });
-    }
+    const user = await collection.findOne({ email });
+
+    if (!user)
+      return res.status(404).json({
+        message: "Invalid email or password",
+      });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch)
+      return res.status(404).json({
+        message: "Invalid email or password",
+      });
+
+    const token = jwt.sign(
+      { email: user.email, role: user.role },
+      process.env.JWT_TOKEN,
+      { expiresIn: "1d" },
+    );
+
+    return res
+      .cookie("pathology_token", token, cookieOptions)
+      .status(200)
+      .json({ email: user.email, role: user.role });
   } catch (error) {
-    handleError(res, error, "Something went wrong");
+    handleError(res, error);
   }
 });
 
-app.get("/logout", async (req, res) => {
-  res
+app.post("/logout", (req, res) => {
+  return res
     .clearCookie("pathology_token", cookieOptions)
     .status(200)
-    .json({ message: "success" });
+    .json({ message: "Logged out successfully" });
 });
 
 app.get("/overview", verify, async (req, res) => {
-  const { email } = req.query;
-  if (email !== req?.user?.email) {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const collection = db.collection("due-sample");
 
     const results = await collection.find({}).toArray();
-    res.status(200).json({ data: results });
+    return res.status(200).json({ data: results });
   } catch (error) {
     handleError(res, error);
   }
 });
 
-// ========== PHLEBOTOMIST ROUTES ==========
-app.get("/get-all-phlebotomist", verify, async (req, res) => {
-  const { page = 0, limit = 10, search = "", email } = req.query;
 
-  if (email !== req?.user?.email) {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
+app.get("/get-all-phlebotomist", verify, async (req, res) => {
+  const { page = 0, limit = 10, search = "" } = req.query;
 
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const collection = db.collection("phlebotomist");
-
-    // One-time unique index (safe)
-    await collection.createIndex({ phlebotomist_id: 1 }, { unique: true });
 
     const query = search ? { name: { $regex: search, $options: "i" } } : {};
 
@@ -133,20 +154,15 @@ app.get("/get-all-phlebotomist", verify, async (req, res) => {
       .toArray();
 
     const total = await collection.countDocuments(query);
+    return res.status(200).json({ data: results, total });
 
-    res.status(200).json({ data: results, total });
   } catch (error) {
     handleError(res, error, "phlebotomist_id must be unique");
   }
 });
 
-app.post("/add-phlebotomist", verify, async (req, res) => {
-  const { data, email } = req.body;
-
-  if (email !== req?.user?.email || req.user.role !== "admin") {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
+app.post("/add-phlebotomist", verify, isAdmin, async (req, res) => {
+  const { data} = req.body;
 
   try {
     const client = await clientPromise;
@@ -154,20 +170,14 @@ app.post("/add-phlebotomist", verify, async (req, res) => {
     const collection = db.collection("phlebotomist");
 
     const response = await collection.insertOne(data);
-    res.status(201).json(response);
+    return res.status(201).json(response);
   } catch (error) {
     handleError(res, error, "phlebotomist_id must be unique");
   }
 });
 
-app.patch("/update-phlebotomist", verify, async (req, res) => {
-  const { id, data, email } = req.body;
-
-  if (email !== req?.user?.email || req.user.role !== "admin") {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
-
+app.patch("/update-phlebotomist", verify, isAdmin, async (req, res) => {
+  const { id, data} = req.body;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -178,33 +188,26 @@ app.patch("/update-phlebotomist", verify, async (req, res) => {
       { $set: data },
     );
 
-    res.status(200).json(response);
+    return res.status(200).json(response);
   } catch (error) {
     handleError(res, error);
   }
 });
 
 app.delete("/delete-phlebotomist", verify, async (req, res) => {
-  const { id, email } = req.query;
-
-  if (email !== req?.user?.email || req.user.role !== "admin") {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
-
+  const { id} = req.query;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const collection = db.collection("phlebotomist");
 
     const response = await collection.deleteOne({ _id: new ObjectId(id) });
-    res.status(200).json(response);
+    return res.status(200).json(response);
   } catch (error) {
     handleError(res, error);
   }
 });
 
-// ========== DUE SAMPLE ROUTES ==========
 
 app.get("/get-all-sample", verify, async (req, res) => {
   const {
@@ -213,13 +216,7 @@ app.get("/get-all-sample", verify, async (req, res) => {
     search = "",
     selectedDate = "",
     sampleStatus = "Due",
-    email,
   } = req.query;
-
-  if (email !== req?.user?.email) {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
 
   try {
     const client = await clientPromise;
@@ -241,28 +238,20 @@ app.get("/get-all-sample", verify, async (req, res) => {
       .toArray();
 
     const total = await collection.countDocuments(query);
+    return res.status(200).json({ data: results, total });
 
-    res.status(200).json({ data: results, total });
   } catch (error) {
     handleError(res, error);
   }
 });
 
 app.post("/add-sample", verify, async (req, res) => {
-  const { data, email } = req.body;
-  if (email !== req?.user?.email) {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
-
+  const { data} = req.body;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const sampleCollection = db.collection("due-sample");
     const phlebotomistCollection = db.collection("phlebotomist");
-
-    // Ensure unique invoice index (one-time)
-    await sampleCollection.createIndex({ invoice: 1 }, { unique: true });
 
     // Validate phlebotomist exists
     const phlebotomist = await phlebotomistCollection.findOne({
@@ -276,7 +265,7 @@ app.post("/add-sample", verify, async (req, res) => {
     }
 
     const dueSample = {
-      ...data, // includes invoice sent from front-end
+      ...data,
       phlebotomist: [{ ...phlebotomist }],
       createdAt: moment().toISOString(),
       filterDate: moment().format("YYYY-MM-DD"),
@@ -286,19 +275,14 @@ app.post("/add-sample", verify, async (req, res) => {
     };
 
     const response = await sampleCollection.insertOne(dueSample);
-    res.status(201).json(response);
+    return res.status(201).json(response);
   } catch (error) {
     handleError(res, error, "Invoice must be unique");
   }
 });
 
 app.patch("/update-sample", verify, async (req, res) => {
-  const { id, data, email } = req.body;
-
-  if (email !== req?.user?.email) {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
+  const { id, data} = req.body;
 
   try {
     const client = await clientPromise;
@@ -336,19 +320,14 @@ app.patch("/update-sample", verify, async (req, res) => {
       updateData,
     );
 
-    res.status(200).json(response);
+    return res.status(200).json(response);
   } catch (error) {
     handleError(res, error);
   }
 });
 
 app.delete("/delete-sample", verify, async (req, res) => {
-  const { id, email } = req.query;
-
-  if (email !== req?.user?.email || req.user.role !== "admin") {
-    res.status(403).json({ message: "forbidden access" });
-    return;
-  }
+  const { id} = req.query;
 
   try {
     const client = await clientPromise;
@@ -356,7 +335,7 @@ app.delete("/delete-sample", verify, async (req, res) => {
     const collection = db.collection("due-sample");
 
     const response = await collection.deleteOne({ _id: new ObjectId(id) });
-    res.status(200).json(response);
+    return res.status(200).json(response);
   } catch (error) {
     handleError(res, error);
   }
