@@ -6,7 +6,6 @@ import moment from "moment";
 import clientPromise from "../lib/mongodb.js";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
 
 const app = express();
 const corsOptions = {
@@ -14,7 +13,6 @@ const corsOptions = {
   credentials: true,
 };
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -86,16 +84,9 @@ app.post("/login", async (req, res) => {
     const db = client.db("due-sample");
     const collection = db.collection("user");
 
-    const user = await collection.findOne({ email });
+    const user = await collection.findOne({ email, password });
 
     if (!user)
-      return res.status(404).json({
-        message: "Invalid email or password",
-      });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch)
       return res.status(404).json({
         message: "Invalid email or password",
       });
@@ -135,7 +126,6 @@ app.get("/overview", verify, async (req, res) => {
   }
 });
 
-
 app.get("/get-all-phlebotomist", verify, async (req, res) => {
   const { page = 0, limit = 10, search = "" } = req.query;
 
@@ -155,14 +145,13 @@ app.get("/get-all-phlebotomist", verify, async (req, res) => {
 
     const total = await collection.countDocuments(query);
     return res.status(200).json({ data: results, total });
-
   } catch (error) {
     handleError(res, error, "phlebotomist_id must be unique");
   }
 });
 
 app.post("/add-phlebotomist", verify, isAdmin, async (req, res) => {
-  const { data} = req.body;
+  const { data } = req.body;
 
   try {
     const client = await clientPromise;
@@ -177,7 +166,7 @@ app.post("/add-phlebotomist", verify, isAdmin, async (req, res) => {
 });
 
 app.patch("/update-phlebotomist", verify, isAdmin, async (req, res) => {
-  const { id, data} = req.body;
+  const { id, data } = req.body;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -195,7 +184,7 @@ app.patch("/update-phlebotomist", verify, isAdmin, async (req, res) => {
 });
 
 app.delete("/delete-phlebotomist", verify, async (req, res) => {
-  const { id} = req.query;
+  const { id } = req.query;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -207,7 +196,6 @@ app.delete("/delete-phlebotomist", verify, async (req, res) => {
     handleError(res, error);
   }
 });
-
 
 app.get("/get-all-sample", verify, async (req, res) => {
   const {
@@ -239,14 +227,13 @@ app.get("/get-all-sample", verify, async (req, res) => {
 
     const total = await collection.countDocuments(query);
     return res.status(200).json({ data: results, total });
-
   } catch (error) {
     handleError(res, error);
   }
 });
 
 app.post("/add-sample", verify, async (req, res) => {
-  const { data} = req.body;
+  const { data } = req.body;
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -282,7 +269,7 @@ app.post("/add-sample", verify, async (req, res) => {
 });
 
 app.patch("/update-sample", verify, async (req, res) => {
-  const { id, data} = req.body;
+  const { id, data } = req.body;
 
   try {
     const client = await clientPromise;
@@ -327,7 +314,7 @@ app.patch("/update-sample", verify, async (req, res) => {
 });
 
 app.delete("/delete-sample", verify, async (req, res) => {
-  const { id} = req.query;
+  const { id } = req.query;
 
   try {
     const client = await clientPromise;
