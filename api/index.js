@@ -24,7 +24,6 @@ const cookieOptions = {
   secure: isProduction,
 };
 
-
 //////////////////////////////
 // INIT INDEX ONCE
 //////////////////////////////
@@ -66,6 +65,8 @@ const isAdmin = (req, res, next) => {
 
   next();
 };
+
+
 
 //////////////////////////////
 // ERROR HANDLER
@@ -116,7 +117,7 @@ app.post("/logout", (req, res) => {
     .json({ message: "Logged out successfully" });
 });
 
-app.get("/overview", verify, async (req, res) => {
+app.get("/overview", async (req, res) => {
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -129,7 +130,7 @@ app.get("/overview", verify, async (req, res) => {
   }
 });
 
-app.get("/get-all-phlebotomist", verify, async (req, res) => {
+app.get("/get-all-phlebotomist", async (req, res) => {
   const { page = 0, limit = 10, search = "" } = req.query;
 
   try {
@@ -153,7 +154,7 @@ app.get("/get-all-phlebotomist", verify, async (req, res) => {
   }
 });
 
-app.post("/add-phlebotomist", verify, isAdmin, async (req, res) => {
+app.post("/add-phlebotomist", async (req, res) => {
   const { data } = req.body;
 
   try {
@@ -168,7 +169,7 @@ app.post("/add-phlebotomist", verify, isAdmin, async (req, res) => {
   }
 });
 
-app.patch("/update-phlebotomist", verify, isAdmin, async (req, res) => {
+app.patch("/update-phlebotomist", async (req, res) => {
   const { id, data } = req.body;
   try {
     const client = await clientPromise;
@@ -186,7 +187,7 @@ app.patch("/update-phlebotomist", verify, isAdmin, async (req, res) => {
   }
 });
 
-app.delete("/delete-phlebotomist", verify, async (req, res) => {
+app.delete("/delete-phlebotomist", async (req, res) => {
   const { id } = req.query;
   try {
     const client = await clientPromise;
@@ -200,7 +201,7 @@ app.delete("/delete-phlebotomist", verify, async (req, res) => {
   }
 });
 
-app.get("/get-all-sample", verify, async (req, res) => {
+app.get("/get-all-sample", async (req, res) => {
   const {
     page = 0,
     limit = 10,
@@ -235,7 +236,7 @@ app.get("/get-all-sample", verify, async (req, res) => {
   }
 });
 
-app.post("/add-sample", verify, async (req, res) => {
+app.post("/add-sample", async (req, res) => {
   const { data } = req.body;
   try {
     const client = await clientPromise;
@@ -271,7 +272,7 @@ app.post("/add-sample", verify, async (req, res) => {
   }
 });
 
-app.patch("/update-sample", verify, async (req, res) => {
+app.patch("/update-sample", async (req, res) => {
   const { id, data } = req.body;
 
   try {
@@ -316,7 +317,7 @@ app.patch("/update-sample", verify, async (req, res) => {
   }
 });
 
-app.delete("/delete-sample", verify, async (req, res) => {
+app.delete("/delete-sample", async (req, res) => {
   const { id } = req.query;
 
   try {
