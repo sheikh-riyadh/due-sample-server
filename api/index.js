@@ -16,11 +16,14 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
+const isProduction = process.env.VERCEL === "1";
+
 const cookieOptions = {
   httpOnly: true,
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  secure: process.env.NODE_ENV === "production" ? true : false,
+  sameSite: isProduction ? "none" : "lax",
+  secure: isProduction,
 };
+
 
 //////////////////////////////
 // INIT INDEX ONCE
