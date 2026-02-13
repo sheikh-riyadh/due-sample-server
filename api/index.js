@@ -9,7 +9,10 @@ import jwt from "jsonwebtoken";
 
 const app = express();
 const corsOptions = {
-  origin: process.env.FRONTEND_URL,
+  origin: [
+    "http://localhost:5173",
+    "https://due-test.vercel.app"
+  ],
   credentials: true,
 };
 app.use(cors(corsOptions));
