@@ -8,24 +8,23 @@ import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 
 const app = express();
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL,
-    credentials: true,
-  }),
-);
-
+const corsOptions = {
+  origin: process.env.FRONTEND_URL,
+  credentials: true,
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
 const cookieOptions = {
   httpOnly: true,
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   secure: process.env.NODE_ENV === "production" ? true : false,
 };
 
 const verify = async (req, res, next) => {
-  const token = req.cookies?.captake_user_token;
+  const token = req.cookies?.pathology_token;
   if (!token) {
     res.status(401).json({ message: "Unauthorized" });
     return;
@@ -50,9 +49,6 @@ const handleError = (res, error, customMessage) => {
   return res.status(500).json({ message: "An error occurred" });
 };
 
-
-
-
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -72,8 +68,10 @@ app.post("/login", async (req, res) => {
       res
         .cookie("pathology_token", token, cookieOptions)
         .status(200)
-        .json({email:user?.email, role:user?.role});
+        .json({ email: user?.email, role: user?.role });
       return;
+    } else {
+      res.status(404).json({ message: "Invalid email or password" });
     }
   } catch (error) {
     handleError(res, error, "Something went wrong");
@@ -87,7 +85,12 @@ app.get("/logout", async (req, res) => {
     .json({ message: "success" });
 });
 
-app.get("/overview", async (req, res) => {
+app.get("/overview", verify, async (req, res) => {
+  const { email } = req.query;
+  if (email !== req?.user?.email) {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -101,8 +104,14 @@ app.get("/overview", async (req, res) => {
 });
 
 // ========== PHLEBOTOMIST ROUTES ==========
-app.get("/get-all-phlebotomist", async (req, res) => {
-  const { page = 0, limit = 10, search = "" } = req.query;
+app.get("/get-all-phlebotomist", verify, async (req, res) => {
+  const { page = 0, limit = 10, search = "", email } = req.query;
+
+  if (email !== req?.user?.email) {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -128,21 +137,34 @@ app.get("/get-all-phlebotomist", async (req, res) => {
   }
 });
 
-app.post("/add-phlebotomist", async (req, res) => {
+app.post("/add-phlebotomist", verify, async (req, res) => {
+  const { data, email } = req.body;
+
+  if (email !== req?.user?.email || req.user.role !== "admin") {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const collection = db.collection("phlebotomist");
 
-    const response = await collection.insertOne(req.body);
+    const response = await collection.insertOne(data);
     res.status(201).json(response);
   } catch (error) {
     handleError(res, error, "phlebotomist_id must be unique");
   }
 });
 
-app.patch("/update-phlebotomist", async (req, res) => {
-  const { id, data } = req.body;
+app.patch("/update-phlebotomist", verify, async (req, res) => {
+  const { id, data, email } = req.body;
+
+  if (email !== req?.user?.email || req.user.role !== "admin") {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -159,8 +181,14 @@ app.patch("/update-phlebotomist", async (req, res) => {
   }
 });
 
-app.delete("/delete-phlebotomist", async (req, res) => {
-  const { id } = req.query;
+app.delete("/delete-phlebotomist", verify, async (req, res) => {
+  const { id, email } = req.query;
+
+  if (email !== req?.user?.email || req.user.role !== "admin") {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -175,14 +203,21 @@ app.delete("/delete-phlebotomist", async (req, res) => {
 
 // ========== DUE SAMPLE ROUTES ==========
 
-app.get("/get-all-sample", async (req, res) => {
+app.get("/get-all-sample", verify, async (req, res) => {
   const {
     page = 0,
     limit = 10,
     search = "",
     selectedDate = "",
     sampleStatus = "Due",
+    email,
   } = req.query;
+
+  if (email !== req?.user?.email) {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -210,7 +245,13 @@ app.get("/get-all-sample", async (req, res) => {
   }
 });
 
-app.post("/add-sample", async (req, res) => {
+app.post("/add-sample", verify, async (req, res) => {
+  const { data, email } = req.body;
+  if (email !== req?.user?.email) {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -222,17 +263,17 @@ app.post("/add-sample", async (req, res) => {
 
     // Validate phlebotomist exists
     const phlebotomist = await phlebotomistCollection.findOne({
-      phlebotomist_id: req.body.phlebotomist_id,
+      phlebotomist_id: data.phlebotomist_id,
     });
 
     if (!phlebotomist) {
       return res.status(404).json({
-        message: `Phlebotomist with id ${req.body.phlebotomist_id} not found 😥`,
+        message: `Phlebotomist not found 😥`,
       });
     }
 
     const dueSample = {
-      ...req.body, // includes invoice sent from front-end
+      ...data, // includes invoice sent from front-end
       phlebotomist: [{ ...phlebotomist }],
       createdAt: moment().toISOString(),
       filterDate: moment().format("YYYY-MM-DD"),
@@ -248,8 +289,13 @@ app.post("/add-sample", async (req, res) => {
   }
 });
 
-app.patch("/update-sample", async (req, res) => {
-  const { id, data } = req.body;
+app.patch("/update-sample", verify, async (req, res) => {
+  const { id, data, email } = req.body;
+
+  if (email !== req?.user?.email) {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
 
   try {
     const client = await clientPromise;
@@ -293,8 +339,14 @@ app.patch("/update-sample", async (req, res) => {
   }
 });
 
-app.delete("/delete-sample", async (req, res) => {
-  const { id } = req.query;
+app.delete("/delete-sample", verify, async (req, res) => {
+  const { id, email } = req.query;
+
+  if (email !== req?.user?.email || req.user.role !== "admin") {
+    res.status(403).json({ message: "forbidden access" });
+    return;
+  }
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
