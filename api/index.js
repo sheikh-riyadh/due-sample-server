@@ -95,18 +95,17 @@ app.post("/login", async (req, res) => {
         message: "Invalid email or password",
       });
 
-    // const token = jwt.sign(
-    //   { email: user.email, role: user.role },
-    //   process.env.JWT_TOKEN,
-    //   { expiresIn: "1d" },
-    // );
+    const token = jwt.sign(
+      { email: user.email, role: user.role },
+      process.env.JWT_TOKEN,
+      { expiresIn: "1d" },
+    );
 
-    // return res
-    //   .cookie("pathology_token", token, cookieOptions)
-    //   .status(200)
-    //   .json({ email: user.email, role: user.role });
+    return res
+      .cookie("pathology_token", token, cookieOptions)
+      .status(200)
+      .json({ email: user.email, role: user.role });
 
-    return res.status(200).json({message:"ok"})
   } catch (error) {
     handleError(res, error);
   }
@@ -119,7 +118,7 @@ app.post("/logout", (req, res) => {
     .json({ message: "Logged out successfully" });
 });
 
-app.get("/overview", async (req, res) => {
+app.get("/overview", verify, async (req, res) => {
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
