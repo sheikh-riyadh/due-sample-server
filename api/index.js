@@ -119,7 +119,7 @@ app.post("/logout", (req, res) => {
     .json({ message: "Logged out successfully" });
 });
 
-app.get("/overview", verify, async (req, res) => {
+app.get("/overview", async (req, res) => {
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
