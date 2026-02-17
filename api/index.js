@@ -8,10 +8,24 @@ import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 
 const app = express();
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://due-test.vercel.app"
+];
+
 const corsOptions = {
-  origin: ["http://localhost:5173", "https://due-test.vercel.app"],
-  credentials: true,
+  origin: function (origin, callback) {
+    // browser থেকে কোনো request origin আছে কিনা check
+    if (!origin) return callback(null, true); // Postman বা server-side request
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true); // allowed
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true, // cookies / auth support
 };
+
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
