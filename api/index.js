@@ -37,10 +37,44 @@ const initIndexes = async () => {
 
   await db
     .collection("due-sample")
-    .createIndex({ invoice: 1 }, { unique: true });
+    .createIndexes([
+      { key: { invoice: 1 }, unique: true },
+      { key: { status: 1, filterDate: 1 } },
+      { key: { filterDate: 1 } },
+    ]);
 };
 
 initIndexes();
+
+const buildQuery = (filters) => {
+  const query = {};
+
+  if (filters.invoice) {
+    query.invoice = filters.invoice;
+  }
+
+  if (filters.status) {
+    query.status = filters.status;
+  }
+
+  if (filters.date) {
+    const startDate = moment(filters.date, "YYYY-MM-DD")
+      .startOf("day")
+      .toDate();
+
+    const nextDate = moment(filters.date, "YYYY-MM-DD")
+      .add(1, "day")
+      .startOf("day")
+      .toDate();
+
+    query.filterDate = {
+      $gte: startDate,
+      $lt: nextDate,
+    };
+  }
+
+  return query;
+};
 
 //////////////////////////////
 // AUTH MIDDLEWARE
@@ -65,8 +99,6 @@ const isAdmin = (req, res, next) => {
 
   next();
 };
-
-
 
 //////////////////////////////
 // ERROR HANDLER
@@ -105,7 +137,6 @@ app.post("/login", async (req, res) => {
       .cookie("pathology_token", token, cookieOptions)
       .status(200)
       .json({ email: user.email, role: user.role });
-
   } catch (error) {
     handleError(res, error);
   }
@@ -134,6 +165,12 @@ app.get("/overview", verify, async (req, res) => {
 app.get("/get-all-phlebotomist", verify, async (req, res) => {
   const { page = 0, limit = 10, search = "" } = req.query;
 
+  const projection = {};
+
+  if (req.user.role !== "admin") {
+    projection.phlebotomist_id = 0;
+  }
+
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -142,7 +179,7 @@ app.get("/get-all-phlebotomist", verify, async (req, res) => {
     const query = search ? { name: { $regex: search, $options: "i" } } : {};
 
     const results = await collection
-      .find(query)
+      .find(query,{projection})
       .sort({ _id: -1 })
       .skip(parseInt(page) * parseInt(limit))
       .limit(parseInt(limit))
@@ -170,7 +207,7 @@ app.post("/add-phlebotomist", verify, isAdmin, async (req, res) => {
   }
 });
 
-app.patch("/update-phlebotomist", verify,isAdmin, async (req, res) => {
+app.patch("/update-phlebotomist", verify, isAdmin, async (req, res) => {
   const { id, data } = req.body;
   try {
     const client = await clientPromise;
@@ -188,7 +225,7 @@ app.patch("/update-phlebotomist", verify,isAdmin, async (req, res) => {
   }
 });
 
-app.delete("/delete-phlebotomist", verify,isAdmin, async (req, res) => {
+app.delete("/delete-phlebotomist", verify, isAdmin, async (req, res) => {
   const { id } = req.query;
   try {
     const client = await clientPromise;
@@ -203,26 +240,18 @@ app.delete("/delete-phlebotomist", verify,isAdmin, async (req, res) => {
 });
 
 app.get("/get-all-sample", verify, async (req, res) => {
-  const {
-    page = 0,
-    limit = 10,
-    search = "",
-    selectedDate = "",
-    sampleStatus = "Due",
-  } = req.query;
+  const { page = 0, limit = 10, status, date, invoice } = req.query;
 
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const collection = db.collection("due-sample");
-
-    const query = { status: sampleStatus };
-
-    if (selectedDate) {
-      query.filterDate = selectedDate;
-    }
-    if (search) query.invoice = { $regex: search, $options: "i" };
-
+    const filters = {
+      invoice,
+      status,
+      date,
+    };
+    const query = buildQuery(filters);
     const results = await collection
       .find(query)
       .sort({ _id: -1 })
@@ -239,6 +268,7 @@ app.get("/get-all-sample", verify, async (req, res) => {
 
 app.post("/add-sample", verify, async (req, res) => {
   const { data } = req.body;
+  const now = moment();
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -259,11 +289,11 @@ app.post("/add-sample", verify, async (req, res) => {
     const dueSample = {
       ...data,
       phlebotomist: [{ ...phlebotomist }],
-      createdAt: moment().toISOString(),
-      filterDate: moment().format("YYYY-MM-DD"),
-      date: moment().format("D"),
-      month: moment().format("MMM"),
-      year: moment().format("YYYY"),
+      createdAt: now.toISOString(),
+      filterDate: now.startOf("day").toDate(),
+      date: now.format("D"),
+      month: now.format("MMM"),
+      year: now.format("YYYY"),
     };
 
     const response = await sampleCollection.insertOne(dueSample);
