@@ -282,7 +282,7 @@ app.get("/get-all-sample", verify, async (req, res) => {
 
 app.post("/add-sample", verify, async (req, res) => {
   const { data } = req.body;
-  const now = moment();
+  const now = moment.tz("Asia/Dhaka");
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
