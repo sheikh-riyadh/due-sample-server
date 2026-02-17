@@ -15,15 +15,14 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // browser থেকে কোনো request origin আছে কিনা check
-    if (!origin) return callback(null, true); // Postman বা server-side request
+    if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
-      callback(null, true); // allowed
+      callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
     }
   },
-  credentials: true, // cookies / auth support
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
