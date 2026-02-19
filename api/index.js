@@ -8,10 +8,7 @@ import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 
 const app = express();
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://due-test.vercel.app"
-];
+const allowedOrigins = ["http://localhost:5173", "https://due-test.vercel.app"];
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -107,6 +104,7 @@ const verify = (req, res, next) => {
 };
 
 const isAdmin = (req, res, next) => {
+  console.log();
   if (req.user.role !== "admin")
     return res.status(403).json({ message: "Forbidden access" });
 
@@ -192,7 +190,7 @@ app.get("/get-all-phlebotomist", verify, async (req, res) => {
     const query = search ? { name: { $regex: search, $options: "i" } } : {};
 
     const results = await collection
-      .find(query,{projection})
+      .find(query, { projection })
       .sort({ _id: -1 })
       .skip(parseInt(page) * parseInt(limit))
       .limit(parseInt(limit))
@@ -206,14 +204,13 @@ app.get("/get-all-phlebotomist", verify, async (req, res) => {
 });
 
 app.post("/add-phlebotomist", verify, isAdmin, async (req, res) => {
-  const { data } = req.body;
-
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
     const collection = db.collection("phlebotomist");
 
-    const response = await collection.insertOne(data);
+    const response = await collection.insertOne(req.body);
+
     return res.status(201).json(response);
   } catch (error) {
     handleError(res, error, "phlebotomist_id must be unique");
@@ -281,7 +278,6 @@ app.get("/get-all-sample", verify, async (req, res) => {
 
 app.post("/add-sample", verify, async (req, res) => {
   const { data } = req.body;
-  const now = moment.tz("Asia/Dhaka");
   try {
     const client = await clientPromise;
     const db = client.db("due-sample");
@@ -290,23 +286,23 @@ app.post("/add-sample", verify, async (req, res) => {
 
     // Validate phlebotomist exists
     const phlebotomist = await phlebotomistCollection.findOne({
-      phlebotomist_id: data.phlebotomist_id,
+      phlebotomist_id: data.secret,
     });
 
     if (!phlebotomist) {
       return res.status(404).json({
-        message: `Phlebotomist not found 😥`,
+        message: `Phlebotomist with id ${data?.secret} not found 😥`,
       });
     }
 
     const dueSample = {
       ...data,
       phlebotomist: [{ ...phlebotomist }],
-      createdAt: now.toISOString(),
-      filterDate: now.startOf("day").toDate(),
-      date: now.format("D"),
-      month: now.format("MMM"),
-      year: now.format("YYYY"),
+      createdAt: moment().toISOString(),
+      filterDate: new Date(),
+      date: moment().format("D"),
+      month: moment().format("MMM"),
+      year: moment().format("YYYY"),
     };
 
     const response = await sampleCollection.insertOne(dueSample);
@@ -327,12 +323,12 @@ app.patch("/update-sample", verify, async (req, res) => {
 
     // Validate new phlebotomist
     const newPhlebotomist = await phlebotomistCollection.findOne({
-      phlebotomist_id: data?.phlebotomist_id,
+      phlebotomist_id: data?.secret,
     });
 
     if (!newPhlebotomist) {
       return res.status(404).json({
-        message: `Phlebotomist with id ${data?.phlebotomist_id} not found 😥`,
+        message: `Phlebotomist with id ${data?.secret} not found 😥`,
       });
     }
 
