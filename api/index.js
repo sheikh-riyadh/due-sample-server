@@ -263,7 +263,11 @@ app.get("/get-all-sample", verify, async (req, res) => {
     };
     const query = buildQuery(filters);
     const results = await collection
-      .find(query)
+      .find(query, {
+        projection: {
+          "phlebotomist.phlebotomist_id": 0,
+        },
+      })
       .sort({ _id: -1 })
       .skip(parseInt(page) * parseInt(limit))
       .limit(parseInt(limit))
