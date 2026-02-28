@@ -266,6 +266,7 @@ app.get("/get-all-sample", verify, async (req, res) => {
       .find(query, {
         projection: {
           "phlebotomist.phlebotomist_id": 0,
+          "secret":0
         },
       })
       .sort({ _id: -1 })
