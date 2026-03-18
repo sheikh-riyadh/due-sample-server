@@ -362,7 +362,7 @@ app.patch("/update-sample", verify, async (req, res) => {
   }
 });
 
-app.delete("/delete-sample", verify, isAdmin, async (req, res) => {
+app.delete("/delete-sample", verify, async (req, res) => {
   const { id } = req.query;
 
   try {
